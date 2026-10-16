@@ -119,7 +119,7 @@ fn best_first(
         }
         explored += 1;
         progress.update(pass, explored, best.as_ref().map(|(t, _)| *t));
-        if explored > max_states {
+        if explored > max_states || progress.cancelled() {
             return (best, Outcome { explored, exhausted: false });
         }
 
@@ -429,6 +429,9 @@ fn beam(
             explored += 1;
             let shown = best.as_ref().map(|(t, _)| *t).into_iter().chain(known).min();
             progress.update("Quick pass", explored, shown);
+            if progress.cancelled() {
+                return best;
+            }
             for child in state.branch(&candidates(state, plan, cfg), cfg.horizon) {
                 if is_terminal(&child, plan) {
                     if let Some(t) = child.finish(plan, cfg.horizon)
@@ -489,6 +492,8 @@ fn greedy(root: &State, plan: &Plan, cfg: &Config, drone_target: u16) -> Option<
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
 
     fn cfg() -> Config {
         Config {
@@ -522,5 +527,14 @@ mod tests {
         assert!(pos(Id::RoachWarren) < pos(Id::Roach));
         assert!(pos(Id::Extractor) < pos(Id::Roach));
         assert_eq!(order.iter().filter(|&&x| x == Id::Roach).count(), 5);
+    }
+
+    #[test]
+    fn cancelled_search_stops_early() {
+        let plan = Plan::new(&[(Id::Mutalisk, 5)]);
+        let mut progress = Progress::shared(Default::default(), Arc::new(AtomicBool::new(true)));
+        let sol = search(&plan, &cfg(), 2000, 2_000_000, &mut progress).expect("the greedy bound still finds a build");
+        assert!(!sol.proven);
+        assert_eq!(sol.explored, 1);
     }
 }

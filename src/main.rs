@@ -1,3 +1,5 @@
+mod app;
+mod build;
 mod data;
 mod plan;
 mod progress;
@@ -5,6 +7,7 @@ mod search;
 mod sim;
 mod table;
 
+use build::Build;
 use plan::Plan;
 use progress::Progress;
 use sim::{Config, clock, ticks};
@@ -15,6 +18,7 @@ const USAGE: &str = "\
 Find the fastest Zerg build order to reach a goal.
 
 Usage: sc2buildmaker [options] <goal>
+       sc2buildmaker            (no arguments opens the app)
 
 Goal examples:
   \"5 roaches\"
@@ -29,9 +33,14 @@ Options:
   --max-queens <n>        Queens allowed for injects (default 2)
   --beam-width <n>        States kept per step by the quick first pass (default 2000)
   --max-states <n>        Exact search budget before settling for the best found (default 1000000)
+  --timeline              Also chart when each action is in production
   -h, --help              Show this help";
 
 fn main() -> ExitCode {
+    if std::env::args().len() == 1 {
+        app::run();
+        return ExitCode::SUCCESS;
+    }
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
@@ -52,6 +61,7 @@ fn run() -> Result<(), String> {
     };
     let mut max_states = 1_000_000;
     let mut beam_width = 2000;
+    let mut timeline = false;
     let mut goal_words = Vec::new();
 
     let mut args = std::env::args().skip(1);
@@ -72,6 +82,7 @@ fn run() -> Result<(), String> {
             "--max-queens" => cfg.max_queens = number(&arg, value(&arg)?)? as u16,
             "--beam-width" => beam_width = number(&arg, value(&arg)?)? as usize,
             "--max-states" => max_states = number(&arg, value(&arg)?)? as usize,
+            "--timeline" => timeline = true,
             a if a.starts_with("--") => return Err(format!("unknown option {a}")),
             _ => goal_words.push(arg),
         }
@@ -87,16 +98,32 @@ fn run() -> Result<(), String> {
     let sol = search::search(&plan, &cfg, beam_width, max_states, &mut Progress::stderr())
         .ok_or("no build order reaches this goal within 20 minutes")?;
 
-    let mut table = Table::new(&[("Start", Align::Right), ("Supply", Align::Right), ("Action", Align::Left)]);
-    for step in sol.state.steps() {
-        table.row(vec![clock(step.tick), step.supply.div_ceil(2).to_string(), data::def(step.id).name.to_string()]);
+    let build = Build::new(&sol);
+    let mut table = Table::new(&[
+        ("Start", Align::Right),
+        ("Done", Align::Right),
+        ("Supply", Align::Right),
+        ("Action", Align::Left),
+        ("Kind", Align::Left),
+    ]);
+    for step in &build.steps {
+        table.row(vec![
+            clock(step.start),
+            clock(step.end),
+            step.supply.to_string(),
+            data::def(step.id).name.to_string(),
+            build::Kind::of(step.id).label().to_string(),
+        ]);
     }
     print!("{}", table.render());
-    println!("\n{} done at {} game time.", Plan::describe(&goal), clock(sol.finish));
-    if sol.proven {
-        println!("Fastest build under the model ({} states explored).", sol.explored);
+    if timeline {
+        println!("\n{}", build.render_timeline(72));
+    }
+    println!("\n{} done at {} game time.", Plan::describe(&goal), clock(build.finish));
+    if build.proven {
+        println!("Fastest build under the model ({} states explored).", build.explored);
     } else {
-        println!("Search budget hit after {} states; this is the best found, not proven fastest.", sol.explored);
+        println!("Search budget hit after {} states; this is the best found, not proven fastest.", build.explored);
     }
     Ok(())
 }

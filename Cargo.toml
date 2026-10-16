@@ -4,3 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+gpui-kit = "0.7.3"
+
+# The search is slow unoptimized, and so are GPUI, layout and text shaping.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3

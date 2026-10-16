@@ -21,6 +21,7 @@ pub fn clock(tick: u32) -> String {
     format!("{}:{:02}", secs / 60, secs % 60)
 }
 
+#[derive(Clone, Copy)]
 pub struct Config {
     /// Seconds a drone walks to the expansion; it mines nothing meanwhile.
     pub expand_travel: f64,

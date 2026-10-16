@@ -42,6 +42,11 @@ Fastest build under the model (827377 states explored).
 While it searches, a status line on stderr shows the pass, states explored and the
 best build found so far. It only appears when stderr is a terminal.
 
+Run it with no arguments to open the desktop app, built with
+[GPUI Kit](https://gpui-kit.com). Type a goal or click units to add them, adjust the
+model settings, and press Enter. The app draws the fastest build as a timeline of
+when each action is in production. `--timeline` prints the same chart in the terminal.
+
 Goals accept counts and common names: `"5 roaches"`, `"roach=8, ravager=2"`,
 `"20 lings and ling speed"`, `"5 mutas"`, `"glial"`. Run with `--help` for options.
 
@@ -54,6 +59,9 @@ Goals accept counts and common names: `"5 roaches"`, `"roach=8, ravager=2"`,
   prerequisites and morph sources (ravagers need roaches).
 - **`sim.rs`**: a 0.25s tick simulation. Drones mine, the simulation puts workers on gas
   only while the build still needs gas, and queens inject whenever they have energy.
+- **`build.rs`**: the finished build that the CLI and the app both display. It
+  holds each action's production window and category, the time axis, and goal editing.
+- **`app.rs`**: the desktop app.
 - **`search.rs`**: chooses what to start next. Every action starts at the earliest
   moment it can. The search runs in four passes:
   1. A greedy build drones to a fixed count, then techs straight up. It tries
