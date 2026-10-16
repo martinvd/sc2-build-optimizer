@@ -1,4 +1,4 @@
-# sc2buildmaker
+# sc2-build-optimizer
 
 Finds the fastest StarCraft II build order to reach a goal. Zerg for now.
 

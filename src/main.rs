@@ -17,8 +17,8 @@ use table::{Align, Table};
 const USAGE: &str = "\
 Find the fastest Zerg build order to reach a goal.
 
-Usage: sc2buildmaker [options] <goal>
-       sc2buildmaker            (no arguments opens the app)
+Usage: sc2-build-optimizer [options] <goal>
+       sc2-build-optimizer      (no arguments opens the app)
 
 Goal examples:
   \"5 roaches\"

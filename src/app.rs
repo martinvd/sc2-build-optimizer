@@ -46,13 +46,13 @@ pub fn run() {
             window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size(px(1320.), px(860.)), cx))),
             ..TitleBar::window_options()
         };
-        gpui_kit::open_window(options, cx, |window, cx| cx.new(|cx| BuildMaker::new(window, cx)))
+        gpui_kit::open_window(options, cx, |window, cx| cx.new(|cx| BuildOptimizer::new(window, cx)))
             .expect("failed to open window");
         cx.activate(true);
     });
 }
 
-actions!(sc2buildmaker, [Quit]);
+actions!(sc2_build_optimizer, [Quit]);
 
 fn kind_color(kind: Kind, cx: &App) -> Hsla {
     let c = &cx.theme().colors;
@@ -77,7 +77,7 @@ struct Running {
     started: Instant,
 }
 
-struct BuildMaker {
+struct BuildOptimizer {
     input: Entity<InputState>,
     /// The goal as parsed from the input, or why it does not parse.
     goal: Result<Vec<(Id, u16)>, String>,
@@ -89,7 +89,7 @@ struct BuildMaker {
     hovered: Option<usize>,
 }
 
-impl BuildMaker {
+impl BuildOptimizer {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let first = PRESETS[0];
         let input = cx.new(|cx| InputState::new(window, cx).placeholder("e.g. 8 roaches and glial").default_value(first));
@@ -102,7 +102,7 @@ impl BuildMaker {
             _ => {}
         })
         .detach();
-        BuildMaker {
+        BuildOptimizer {
             input,
             goal: plan::parse_goal(first),
             cfg: Config {
@@ -199,7 +199,7 @@ impl BuildMaker {
     }
 }
 
-impl Render for BuildMaker {
+impl Render for BuildOptimizer {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         v_flex()
@@ -220,7 +220,7 @@ impl Render for BuildMaker {
 }
 
 // Sidebar: goal, unit palette and model settings.
-impl BuildMaker {
+impl BuildOptimizer {
     fn render_title_bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let dark = cx.theme().is_dark();
         TitleBar::new().child(
@@ -232,7 +232,7 @@ impl BuildMaker {
                     h_flex()
                         .gap_2()
                         .child(logo(cx))
-                        .child(div().text_sm().font_semibold().child("Build Maker"))
+                        .child(div().text_sm().font_semibold().child("Build Optimizer"))
                         .child(div().text_xs().text_color(cx.theme().muted_foreground).child("Zerg · LotV 5.0")),
                 )
                 .child(
@@ -464,7 +464,7 @@ impl BuildMaker {
 }
 
 // Main area: progress, results and the timeline.
-impl BuildMaker {
+impl BuildOptimizer {
     fn render_main(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let content = if let Some(running) = &self.running {
             self.render_searching(running, cx).into_any_element()
@@ -473,7 +473,7 @@ impl BuildMaker {
                 None => empty_state(
                     IconName::Map,
                     "Pick a goal",
-                    "Build Maker searches every build order the model allows and shows the fastest one.",
+                    "Build Optimizer searches every build order the model allows and shows the fastest one.",
                     cx,
                 )
                 .into_any_element(),
@@ -809,8 +809,8 @@ fn stepper(
     value: String,
     can_dec: bool,
     can_inc: bool,
-    change: impl Fn(&mut BuildMaker, i32) + Clone + 'static,
-    cx: &mut Context<BuildMaker>,
+    change: impl Fn(&mut BuildOptimizer, i32) + Clone + 'static,
+    cx: &mut Context<BuildOptimizer>,
 ) -> impl IntoElement {
     let dec = change.clone();
     h_flex()
@@ -861,7 +861,7 @@ fn count_stepper(
     min: u16,
     max: u16,
     field: fn(&mut Config) -> &mut u16,
-    cx: &mut Context<BuildMaker>,
+    cx: &mut Context<BuildOptimizer>,
 ) -> impl IntoElement {
     stepper(
         id,
