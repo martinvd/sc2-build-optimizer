@@ -2,10 +2,12 @@ mod data;
 mod plan;
 mod search;
 mod sim;
+mod table;
 
 use plan::Plan;
 use sim::{Config, TICKS_PER_SEC, ticks};
 use std::process::ExitCode;
+use table::{Align, Table};
 
 const USAGE: &str = "\
 Find the fastest Zerg build order to reach a goal.
@@ -80,10 +82,11 @@ fn run() -> Result<(), String> {
     let sol = search::search(&plan, &cfg, beam_width, max_states)
         .ok_or("no build order reaches this goal within 20 minutes")?;
 
-    println!("  Time  Supply  Action");
+    let mut table = Table::new(&[("Time", Align::Right), ("Supply", Align::Right), ("Action", Align::Left)]);
     for step in sol.state.steps() {
-        println!("  {}  {:>6}  {}", clock(step.tick), step.supply.div_ceil(2), data::def(step.id).name);
+        table.row(vec![clock(step.tick), step.supply.div_ceil(2).to_string(), data::def(step.id).name.to_string()]);
     }
+    print!("{}", table.render());
     println!("\nGoal complete at {}.", clock(sol.finish));
     if sol.proven {
         println!("Fastest build under the model ({} states explored).", sol.explored);
@@ -95,5 +98,5 @@ fn run() -> Result<(), String> {
 
 fn clock(tick: u32) -> String {
     let secs = tick / TICKS_PER_SEC;
-    format!("{:>2}:{:02}", secs / 60, secs % 60)
+    format!("{}:{:02}", secs / 60, secs % 60)
 }
