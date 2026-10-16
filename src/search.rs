@@ -9,9 +9,9 @@
 //! Two things keep the tree small:
 //! - Economy actions are only offered when they can still pay off (no drones
 //!   past saturation, no overlords while supply is plentiful, ...).
-//! - States that started the same multiset of actions are compared, and one
-//!   that is later, poorer, no better off in larva and has nothing finishing
-//!   sooner is dropped.
+//! - Among states that started the same multiset of actions, the search drops
+//!   one that is later, poorer, no better off in larva and has nothing finishing
+//!   sooner than another.
 
 use crate::data::{self, Id, N, Source};
 use crate::plan::Plan;
@@ -256,7 +256,7 @@ fn lower_bound(s: &State, plan: &Plan, cfg: &Config) -> u32 {
 
 /// Earliest tick the remaining plan could be paid for in minerals, then built.
 ///
-/// Income is overestimated: current and in-production drones mine at full
+/// The bound overestimates income. Current and in-production drones mine at full
 /// rate, and every larva the hatcheries could ever spawn turns into a drone the
 /// moment it appears. Such a drone still only counts for what it nets by the
 /// deadline (mining minus its 50 minerals), so short horizons get no credit.

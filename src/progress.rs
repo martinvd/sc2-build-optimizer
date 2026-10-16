@@ -12,7 +12,7 @@ pub struct Progress {
 }
 
 impl Progress {
-    /// Shown only when stderr is a terminal, so pipes and logs stay clean.
+    /// Shown only when stderr is a terminal, so redraws never reach pipes or logs.
     pub fn stderr() -> Self {
         Progress { enabled: std::io::stderr().is_terminal(), last: Instant::now() }
     }
@@ -22,7 +22,7 @@ impl Progress {
         Progress { enabled: false, last: Instant::now() }
     }
 
-    /// Cheap enough to call per state: the clock is only read every 1024 states.
+    /// Cheap enough to call per state, since it reads the clock only every 1024 states.
     pub fn update(&mut self, pass: &str, explored: usize, best: Option<u32>) {
         if !self.enabled || explored % 1024 != 0 || self.last.elapsed() < INTERVAL {
             return;

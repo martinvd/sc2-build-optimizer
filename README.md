@@ -40,7 +40,7 @@ Fastest build under the model (827377 states explored).
 ```
 
 While it searches, a status line on stderr shows the pass, states explored and the
-best build found so far. It is hidden when stderr is not a terminal.
+best build found so far. It only appears when stderr is a terminal.
 
 Goals accept counts and common names: `"5 roaches"`, `"roach=8, ravager=2"`,
 `"20 lings and ling speed"`, `"5 mutas"`, `"glial"`. Run with `--help` for options.
@@ -49,16 +49,18 @@ Goals accept counts and common names: `"5 roaches"`, `"roach=8, ravager=2"`,
 
 - **`data.rs`**: the Zerg tech tree with costs, build times (real seconds at Faster
   speed, LotV 5.0.x) and game constants (mining rates, larva, injects). Verify
-  numbers here against Liquipedia; everything else builds on them.
+  numbers here against Liquipedia, since the rest of the code depends on them.
 - **`plan.rs`**: turns a goal into everything that must be built, including tech
   prerequisites and morph sources (ravagers need roaches).
-- **`sim.rs`**: a 0.25s tick simulation. Drones mine, gas workers are assigned only
-  while the build still needs gas, and queens inject whenever they have energy.
+- **`sim.rs`**: a 0.25s tick simulation. Drones mine, the simulation puts workers on gas
+  only while the build still needs gas, and queens inject whenever they have energy.
 - **`search.rs`**: chooses what to start next. Every action starts at the earliest
   moment it can. The search runs in four passes:
-  1. A greedy build and a beam search give a decent build quickly.
-  2. A best-first search with loose state merging gives a near-optimal bound.
-  3. A best-first search with strict merging improves on that bound or confirms it.
+  1. A greedy build drones to a fixed count, then techs straight up. It tries
+     every drone count and keeps the fastest.
+  2. A beam search keeps the most promising states at each depth.
+  3. A best-first search with loose state merging gives a near-optimal bound.
+  4. A best-first search with strict merging improves on that bound or confirms it.
      Admissible lower bounds (tech critical path, gas, larva, minerals) prune it.
 
 The search decides on its own about extra drones, overlords, queens, extractors

@@ -2,7 +2,7 @@
 //!
 //! All times are in real seconds at "Faster" game speed (what the in-game clock
 //! shows in Legacy of the Void). Values follow the 5.0.x balance patches; check
-//! them against Liquipedia when tuning, since everything else builds on them.
+//! them against Liquipedia when tuning, since the rest of the code depends on them.
 //!
 //! Supply is stored in half-supply units so a single zergling (0.5) is exact.
 

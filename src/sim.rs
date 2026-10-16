@@ -1,7 +1,7 @@
 //! Tick-based simulation of a Zerg economy.
 //!
-//! Workers mine automatically, gas workers are assigned only while the build
-//! still needs gas, and every queen injects its hatchery whenever it can.
+//! Workers mine on their own, the simulation puts workers on gas only while the
+//! build still needs gas, and every queen injects its hatchery whenever it can.
 //! The only decisions left to the search are what to start, and in which order.
 
 use crate::data::{self, Id, N, Source};
