@@ -24,7 +24,7 @@ impl Progress {
 
     /// Cheap enough to call per state, since it reads the clock only every 1024 states.
     pub fn update(&mut self, pass: &str, explored: usize, best: Option<u32>) {
-        if !self.enabled || explored % 1024 != 0 || self.last.elapsed() < INTERVAL {
+        if !self.enabled || !explored.is_multiple_of(1024) || self.last.elapsed() < INTERVAL {
             return;
         }
         self.last = Instant::now();
@@ -44,7 +44,7 @@ fn group(n: usize) -> String {
     let digits = n.to_string();
     let mut out = String::new();
     for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i) % 3 == 0 {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
             out.push(',');
         }
         out.push(c);

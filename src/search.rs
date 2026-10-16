@@ -16,7 +16,7 @@
 use crate::data::{self, Id, N, Source};
 use crate::plan::Plan;
 use crate::progress::Progress;
-use crate::sim::{Config, State, TICKS_PER_SEC, ticks};
+use crate::sim::{Config, State, Status, TICKS_PER_SEC, ticks};
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
 
@@ -178,7 +178,7 @@ fn candidates(s: &State, plan: &Plan, cfg: &Config) -> Vec<Id> {
             Id::MacroHatchery => started(id) < cfg.max_macro_hatcheries.max(goal(id)),
             _ => remaining(s, plan, id) > 0,
         })
-        .filter(|&id| s.status(id) != crate::sim::Status::Never)
+        .filter(|&id| s.status(id) != Status::Never)
         .collect()
 }
 
@@ -406,10 +406,10 @@ fn beam(
             progress.update("Quick pass", explored, shown);
             for child in state.branch(&candidates(state, plan, cfg), cfg.horizon) {
                 if is_terminal(&child, plan) {
-                    if let Some(t) = child.finish(plan, cfg.horizon) {
-                        if best.as_ref().is_none_or(|(b, _)| t < *b) {
-                            best = Some((t, child));
-                        }
+                    if let Some(t) = child.finish(plan, cfg.horizon)
+                        && best.as_ref().is_none_or(|(b, _)| t < *b)
+                    {
+                        best = Some((t, child));
                     }
                     continue;
                 }

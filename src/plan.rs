@@ -47,10 +47,10 @@ fn split_count(part: &str) -> (u16, &str) {
         let rest = rest.strip_prefix(['x', '*']).filter(|r| !r.is_empty()).unwrap_or(rest);
         return (part[..digits].parse().unwrap_or(0), rest.trim());
     }
-    if let Some((name, n)) = part.rsplit_once(' ') {
-        if let Ok(n) = n.parse() {
-            return (n, name.trim());
-        }
+    if let Some((name, n)) = part.rsplit_once(' ')
+        && let Ok(n) = n.parse()
+    {
+        return (n, name.trim());
     }
     (1, part)
 }
