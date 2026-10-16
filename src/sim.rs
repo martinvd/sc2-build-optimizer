@@ -62,15 +62,19 @@ pub struct State {
     pub gas: f64,
     pub supply_used: u32,
     pub supply_cap: u32,
+    // Counts are u8 to keep states small; the search holds millions of them.
+    // `Plan::oversized` rejects goals that could overflow them.
     /// Completed and alive, per item (individual units).
-    pub done: [u16; N],
+    done: [u8; N],
     /// In production, per item (actions).
-    pub pending: [u16; N],
+    pub pending: [u8; N],
     /// Actions ever started, per item.
-    pub started: [u16; N],
+    pub started: [u8; N],
     pub hatches: Vec<Hatch>,
     queens: Vec<f64>,
-    building_busy: [u32; N],
+    /// Tick each production building frees up. Fits in u16: the search horizon
+    /// is 20 minutes, well under u16::MAX ticks.
+    building_busy: [u16; N],
     jobs: Vec<(u32, Id)>,
     gas_spent: u32,
     gas_budget: u32,
@@ -80,9 +84,9 @@ pub struct State {
 
 impl State {
     pub fn start(plan: &Plan, cfg: &Config) -> State {
-        let mut done = [0u16; N];
+        let mut done = [0u8; N];
         for id in data::all() {
-            done[id as usize] = plan::initial_count(id);
+            done[id as usize] = plan::initial_count(id) as u8;
         }
         State {
             tick: 0,
@@ -106,11 +110,19 @@ impl State {
     }
 
     pub fn count(&self, id: Id) -> u16 {
-        self.done[id as usize]
+        self.done[id as usize] as u16
+    }
+
+    pub fn pending(&self, id: Id) -> u16 {
+        self.pending[id as usize] as u16
+    }
+
+    pub fn started(&self, id: Id) -> u16 {
+        self.started[id as usize] as u16
     }
 
     pub fn count_with_pending(&self, id: Id) -> u16 {
-        self.done[id as usize] + self.pending[id as usize] * data::def(id).yields
+        self.count(id) + self.pending(id) * data::def(id).yields
     }
 
     pub fn bases(&self) -> u16 {
@@ -201,7 +213,7 @@ impl State {
     fn complete(&mut self, id: Id) {
         let def = data::def(id);
         self.pending[id as usize] -= 1;
-        self.done[id as usize] += def.yields;
+        self.done[id as usize] += def.yields as u8;
         self.supply_cap += def.provides;
         match id {
             Id::Hatchery | Id::MacroHatchery => self.hatches.push(Hatch {
@@ -263,7 +275,7 @@ impl State {
             Source::Building(b) => {
                 if !self.has(b) {
                     need(waiting_on(b));
-                } else if self.building_busy[b as usize] > self.tick {
+                } else if self.building_busy[b as usize] as u32 > self.tick {
                     need(Status::Wait);
                 }
             }
@@ -316,7 +328,7 @@ impl State {
                 let hatch = self.hatches.iter_mut().find(|h| h.busy_until <= now).unwrap();
                 hatch.busy_until = now + build;
             }
-            Source::Building(b) => self.building_busy[b as usize] = self.tick + build,
+            Source::Building(b) => self.building_busy[b as usize] = (self.tick + build) as u16,
         }
         self.supply_used += def.supply;
         self.jobs.push((self.tick + build, id));
@@ -366,7 +378,7 @@ impl State {
     }
 
     pub fn goal_met(&self, plan: &Plan) -> bool {
-        data::all().all(|id| self.done[id as usize] >= plan.goal[id as usize])
+        data::all().all(|id| self.count(id) >= plan.goal[id as usize])
     }
 
     /// Runs the clock until the goal is complete.

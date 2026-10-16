@@ -82,6 +82,6 @@ and taking an expansion.
 
 - Large goals (20+ units) hit the default search budget. You still get the best
   build found, labeled as not proven. Raise `--max-states` to search longer, at
-  roughly 1.5 GB of memory per million states.
+  roughly 1 GB of memory per million states.
 - Only Zerg. Adding a race means a new data table and its production rules
   (chrono boost, MULEs, add-ons).

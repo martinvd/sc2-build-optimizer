@@ -65,7 +65,33 @@ struct Outcome {
     exhausted: bool,
 }
 
-type Seen = HashMap<([u16; N], [u16; N]), Vec<Mark>>;
+/// A queue entry, popped lowest bound first, then deepest, then newest.
+struct Queued {
+    key: (Reverse<u32>, u16, usize),
+    state: State,
+}
+
+impl PartialEq for Queued {
+    fn eq(&self, other: &Self) -> bool {
+        self.key == other.key
+    }
+}
+
+impl Eq for Queued {}
+
+impl PartialOrd for Queued {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Queued {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.key.cmp(&other.key)
+    }
+}
+
+type Seen = HashMap<([u8; N], [u8; N]), Vec<Mark>>;
 
 fn best_first(
     root: &State,
@@ -77,17 +103,16 @@ fn best_first(
     progress: &mut Progress,
 ) -> (Option<(u32, State)>, Outcome) {
     let pass = if pruning == Pruning::Strict { "Exact search" } else { "Rough search" };
-    let mut arena: Vec<Option<State>> = vec![Some(root.clone())];
     let mut queue = BinaryHeap::new();
-    queue.push((Reverse(0u32), 0u16, 0usize));
+    let mut pushed = 0;
+    queue.push(Queued { key: (Reverse(0), 0, pushed), state: root.clone() });
     let mut seen = Seen::new();
     let mut explored = 0;
 
-    while let Some((Reverse(f), _, idx)) = queue.pop() {
+    while let Some(Queued { key: (Reverse(f), ..), state }) = queue.pop() {
         if best.as_ref().is_some_and(|(t, _)| *t <= f) {
             break;
         }
-        let state = arena[idx].take().unwrap();
         if is_terminal(&state, plan) {
             best = Some((f, state));
             break;
@@ -111,9 +136,9 @@ fn best_first(
             if !record(&mut seen, &child, pruning) {
                 continue;
             }
-            let depth: u16 = child.started.iter().sum();
-            arena.push(Some(child));
-            queue.push((Reverse(f), depth, arena.len() - 1));
+            let depth: u16 = child.started.iter().map(|&n| n as u16).sum();
+            pushed += 1;
+            queue.push(Queued { key: (Reverse(f), depth, pushed), state: child });
         }
     }
 
@@ -126,7 +151,7 @@ fn is_terminal(s: &State, plan: &Plan) -> bool {
         if data::is_economy(id) {
             s.count_with_pending(id) >= plan.goal[i]
         } else {
-            s.started[i] >= plan.required[i]
+            s.started(id) >= plan.required[i]
         }
     })
 }
@@ -135,17 +160,17 @@ fn remaining(s: &State, plan: &Plan, id: Id) -> u16 {
     if data::is_economy(id) {
         0
     } else {
-        plan.required[id as usize].saturating_sub(s.started[id as usize])
+        plan.required[id as usize].saturating_sub(s.started(id))
     }
 }
 
 fn hatcheries_total(s: &State) -> u16 {
-    s.hatches.len() as u16 + s.pending[Id::Hatchery as usize] + s.pending[Id::MacroHatchery as usize]
+    s.hatches.len() as u16 + s.pending(Id::Hatchery) + s.pending(Id::MacroHatchery)
 }
 
 fn drone_cap(s: &State, plan: &Plan) -> u16 {
     let bases = s.count_with_pending(Id::Hatchery);
-    let extractors = s.started[Id::Extractor as usize];
+    let extractors = s.started(Id::Extractor);
     let for_buildings: u16 = data::all()
         .filter(|&id| data::def(id).source == Source::Worker)
         .map(|id| remaining(s, plan, id))
@@ -160,7 +185,7 @@ fn queen_cap(s: &State, plan: &Plan, cfg: &Config) -> u16 {
 
 /// Actions worth trying next from `s`.
 fn candidates(s: &State, plan: &Plan, cfg: &Config) -> Vec<Id> {
-    let started = |id: Id| s.started[id as usize];
+    let started = |id: Id| s.started(id);
     let goal = |id: Id| plan.goal[id as usize];
     let bases = s.count_with_pending(Id::Hatchery);
     let gas_left = s.gas_still_needed() > 0.0;
@@ -196,7 +221,7 @@ fn overlord_useful(s: &State, plan: &Plan, cfg: &Config) -> bool {
         .map(|id| remaining(s, plan, id) as u32 * data::def(id).supply)
         .sum();
     let drones = drone_cap(s, plan).saturating_sub(s.count_with_pending(Id::Drone)) as u32;
-    let queens = queen_cap(s, plan, cfg).saturating_sub(s.started[Id::Queen as usize]) as u32;
+    let queens = queen_cap(s, plan, cfg).saturating_sub(s.started(Id::Queen)) as u32;
     let demand = plan_supply + drones * data::def(Id::Drone).supply + queens * data::def(Id::Queen).supply;
     free < 16 && free < demand
 }
@@ -239,8 +264,8 @@ fn lower_bound(s: &State, plan: &Plan, cfg: &Config) -> u32 {
         .sum();
     if larva_units > s.larva() {
         let hatches = hatcheries_total(s)
-            + cfg.max_expansions.saturating_sub(s.started[Id::Hatchery as usize])
-            + cfg.max_macro_hatcheries.saturating_sub(s.started[Id::MacroHatchery as usize]);
+            + cfg.max_expansions.saturating_sub(s.started(Id::Hatchery))
+            + cfg.max_macro_hatcheries.saturating_sub(s.started(Id::MacroHatchery));
         let per_sec = 1.0 / data::LARVA_INTERVAL + data::INJECT_LARVA as f64 / data::INJECT_TIME;
         let wait = (larva_units - s.larva()) as f64 / (hatches as f64 * per_sec);
         let shortest = shortest_remaining(s, plan, |id| data::def(id).source == Source::Larva);
@@ -270,8 +295,8 @@ fn mineral_bound(s: &State, plan: &Plan, cfg: &Config) -> Option<u32> {
     }
 
     let drone = data::def(Id::Drone);
-    let income = s.mineral_income() + s.pending[Id::Drone as usize] as f64 * data::MINERAL_RATE;
-    let hatches = hatcheries_total(s) + cfg.max_expansions.saturating_sub(s.started[Id::Hatchery as usize]);
+    let income = s.mineral_income() + s.pending(Id::Drone) as f64 * data::MINERAL_RATE;
+    let hatches = hatcheries_total(s) + cfg.max_expansions.saturating_sub(s.started(Id::Hatchery));
     let larva_per_sec =
         hatches as f64 * (1.0 / data::LARVA_INTERVAL + data::INJECT_LARVA as f64 / data::INJECT_TIME);
     let larva_now = s.larva() as f64;
@@ -448,7 +473,7 @@ fn greedy(root: &State, plan: &Plan, cfg: &Config, drone_target: u16) -> Option<
             .filter(|&id| match id {
                 Id::Overlord | Id::Queen | Id::Hatchery | Id::MacroHatchery => false,
                 Id::Drone => s.count_with_pending(Id::Drone) < drone_target,
-                Id::Extractor => s.started[id as usize] == 0,
+                Id::Extractor => s.started(id) == 0,
                 _ => true,
             })
             .collect();

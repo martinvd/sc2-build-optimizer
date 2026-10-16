@@ -79,6 +79,9 @@ fn run() -> Result<(), String> {
 
     let goal = plan::parse_goal(&goal_words.join(" "))?;
     let plan = Plan::new(&goal);
+    if let Some(id) = plan.oversized() {
+        return Err(format!("goal needs more than 200 {}", data::def(id).name));
+    }
     println!("Goal: {}\n", Plan::describe(&goal));
 
     let sol = search::search(&plan, &cfg, beam_width, max_states, &mut Progress::stderr())

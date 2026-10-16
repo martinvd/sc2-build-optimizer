@@ -102,6 +102,16 @@ impl Plan {
         Plan { goal: goal_counts, required, gas }
     }
 
+    /// An item the goal needs more than 200 of. A 200-supply army never does,
+    /// and the simulation stores counts as u8.
+    pub fn oversized(&self) -> Option<Id> {
+        data::all().find(|&id| {
+            let i = id as usize;
+            let units = (initial_count(id) as u32 + self.required[i] as u32) * data::def(id).yields as u32;
+            self.goal[i] > 200 || units > 200
+        })
+    }
+
     pub fn describe(goal: &[(Id, u16)]) -> String {
         goal.iter()
             .map(|&(id, n)| format!("{n} {}", data::def(id).name))
@@ -148,6 +158,13 @@ mod tests {
         let plan = Plan::new(&[(Baneling, 4)]);
         assert_eq!(plan.required[Zergling as usize], 2);
         assert_eq!(plan.required[BanelingNest as usize], 1);
+    }
+
+    #[test]
+    fn rejects_more_than_a_maxed_army() {
+        assert_eq!(Plan::new(&[(Zergling, 200)]).oversized(), None);
+        assert_eq!(Plan::new(&[(Zergling, 202)]).oversized(), Some(Zergling));
+        assert_eq!(Plan::new(&[(Roach, 150), (Ravager, 100)]).oversized(), Some(Roach));
     }
 
     #[test]
