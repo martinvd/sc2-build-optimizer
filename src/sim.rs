@@ -15,6 +15,12 @@ pub fn ticks(seconds: f64) -> u32 {
     (seconds * TICKS_PER_SEC as f64).round() as u32
 }
 
+/// `m:ss` game time.
+pub fn clock(tick: u32) -> String {
+    let secs = tick / TICKS_PER_SEC;
+    format!("{}:{:02}", secs / 60, secs % 60)
+}
+
 pub struct Config {
     /// Seconds a drone walks to the expansion; it mines nothing meanwhile.
     pub expand_travel: f64,

@@ -1,11 +1,13 @@
 mod data;
 mod plan;
+mod progress;
 mod search;
 mod sim;
 mod table;
 
 use plan::Plan;
-use sim::{Config, TICKS_PER_SEC, ticks};
+use progress::Progress;
+use sim::{Config, clock, ticks};
 use std::process::ExitCode;
 use table::{Align, Table};
 
@@ -79,24 +81,19 @@ fn run() -> Result<(), String> {
     let plan = Plan::new(&goal);
     println!("Goal: {}\n", Plan::describe(&goal));
 
-    let sol = search::search(&plan, &cfg, beam_width, max_states)
+    let sol = search::search(&plan, &cfg, beam_width, max_states, &mut Progress::stderr())
         .ok_or("no build order reaches this goal within 20 minutes")?;
 
-    let mut table = Table::new(&[("Time", Align::Right), ("Supply", Align::Right), ("Action", Align::Left)]);
+    let mut table = Table::new(&[("Start", Align::Right), ("Supply", Align::Right), ("Action", Align::Left)]);
     for step in sol.state.steps() {
         table.row(vec![clock(step.tick), step.supply.div_ceil(2).to_string(), data::def(step.id).name.to_string()]);
     }
     print!("{}", table.render());
-    println!("\nGoal complete at {}.", clock(sol.finish));
+    println!("\n{} done at {} game time.", Plan::describe(&goal), clock(sol.finish));
     if sol.proven {
         println!("Fastest build under the model ({} states explored).", sol.explored);
     } else {
         println!("Search budget hit after {} states; this is the best found, not proven fastest.", sol.explored);
     }
     Ok(())
-}
-
-fn clock(tick: u32) -> String {
-    let secs = tick / TICKS_PER_SEC;
-    format!("{}:{:02}", secs / 60, secs % 60)
 }

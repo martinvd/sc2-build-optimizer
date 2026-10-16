@@ -6,15 +6,41 @@ Finds the fastest StarCraft II build order to reach a goal. Zerg for now.
 $ cargo run --release -- 10 roaches
 Goal: 10 Roach
 
-  Time  Supply  Action
-   0:13      12  Spawning Pool
-   0:18      11  Drone
-   ...
-   1:29      19  Roach Warren
-   2:08      18  Roach
-   ...
-Goal complete at  2:56.
+┌───────┬────────┬───────────────┐
+│ Start │ Supply │ Action        │
+├───────┼────────┼───────────────┤
+│  0:13 │     12 │ Spawning Pool │
+│  0:18 │     11 │ Drone         │
+│  0:23 │     12 │ Drone         │
+│  0:28 │     13 │ Drone         │
+│  0:36 │     14 │ Overlord      │
+│  0:39 │     14 │ Extractor     │
+│  0:43 │     13 │ Drone         │
+│  0:54 │     14 │ Drone         │
+│  0:59 │     15 │ Queen         │
+│  1:03 │     17 │ Drone         │
+│  1:13 │     18 │ Drone         │
+│  1:24 │     19 │ Overlord      │
+│  1:29 │     19 │ Roach Warren  │
+│  2:08 │     18 │ Roach         │
+│  2:08 │     20 │ Roach         │
+│  2:08 │     22 │ Roach         │
+│  2:08 │     24 │ Roach         │
+│  2:08 │     26 │ Roach         │
+│  2:08 │     28 │ Roach         │
+│  2:19 │     30 │ Overlord      │
+│  2:37 │     30 │ Roach         │
+│  2:37 │     32 │ Roach         │
+│  2:37 │     34 │ Roach         │
+│  2:37 │     36 │ Roach         │
+└───────┴────────┴───────────────┘
+
+10 Roach done at 2:56 game time.
+Fastest build under the model (827377 states explored).
 ```
+
+While it searches, a status line on stderr shows the pass, states explored and the
+best build found so far. It is hidden when stderr is not a terminal.
 
 Goals accept counts and common names: `"5 roaches"`, `"roach=8, ravager=2"`,
 `"20 lings and ling speed"`, `"5 mutas"`, `"glial"`. Run with `--help` for options.

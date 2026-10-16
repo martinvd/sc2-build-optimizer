@@ -15,6 +15,7 @@
 
 use crate::data::{self, Id, N, Source};
 use crate::plan::Plan;
+use crate::progress::Progress;
 use crate::sim::{Config, State, TICKS_PER_SEC, ticks};
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
@@ -27,14 +28,20 @@ pub struct Solution {
     pub proven: bool,
 }
 
-pub fn search(plan: &Plan, cfg: &Config, beam_width: usize, max_states: usize) -> Option<Solution> {
+pub fn search(
+    plan: &Plan,
+    cfg: &Config,
+    beam_width: usize,
+    max_states: usize,
+    progress: &mut Progress,
+) -> Option<Solution> {
     let root = State::start(plan, cfg);
-    let quick = [greedy_bound(&root, plan, cfg), beam(&root, plan, cfg, beam_width)]
-        .into_iter()
-        .flatten()
-        .min_by_key(|(t, _)| *t);
-    let (rough, _) = best_first(&root, plan, cfg, quick, Pruning::Loose, max_states);
-    let (best, outcome) = best_first(&root, plan, cfg, rough, Pruning::Strict, max_states);
+    let greedy = greedy_bound(&root, plan, cfg);
+    let beamed = beam(&root, plan, cfg, beam_width, greedy.as_ref().map(|(t, _)| *t), progress);
+    let quick = [greedy, beamed].into_iter().flatten().min_by_key(|(t, _)| *t);
+    let (rough, _) = best_first(&root, plan, cfg, quick, Pruning::Loose, max_states, progress);
+    let (best, outcome) = best_first(&root, plan, cfg, rough, Pruning::Strict, max_states, progress);
+    progress.clear();
     best.map(|(finish, state)| Solution {
         state,
         finish,
@@ -67,7 +74,9 @@ fn best_first(
     mut best: Option<(u32, State)>,
     pruning: Pruning,
     max_states: usize,
+    progress: &mut Progress,
 ) -> (Option<(u32, State)>, Outcome) {
+    let pass = if pruning == Pruning::Strict { "Exact search" } else { "Rough search" };
     let mut arena: Vec<Option<State>> = vec![Some(root.clone())];
     let mut queue = BinaryHeap::new();
     queue.push((Reverse(0u32), 0u16, 0usize));
@@ -84,6 +93,7 @@ fn best_first(
             break;
         }
         explored += 1;
+        progress.update(pass, explored, best.as_ref().map(|(t, _)| *t));
         if explored > max_states {
             return (best, Outcome { explored, exhausted: false });
         }
@@ -376,13 +386,24 @@ fn dominates(a: &Mark, b: &Mark) -> bool {
 
 /// A good build found fast: the search tree explored one action at a time,
 /// keeping only the `width` most promising states at each depth.
-fn beam(root: &State, plan: &Plan, cfg: &Config, width: usize) -> Option<(u32, State)> {
+fn beam(
+    root: &State,
+    plan: &Plan,
+    cfg: &Config,
+    width: usize,
+    known: Option<u32>,
+    progress: &mut Progress,
+) -> Option<(u32, State)> {
     let mut best: Option<(u32, State)> = None;
     let mut layer = vec![root.clone()];
+    let mut explored = 0;
     while !layer.is_empty() {
         let mut seen = HashMap::new();
         let mut next = Vec::new();
         for state in &layer {
+            explored += 1;
+            let shown = best.as_ref().map(|(t, _)| *t).into_iter().chain(known).min();
+            progress.update("Quick pass", explored, shown);
             for child in state.branch(&candidates(state, plan, cfg), cfg.horizon) {
                 if is_terminal(&child, plan) {
                     if let Some(t) = child.finish(plan, cfg.horizon) {
@@ -457,7 +478,7 @@ mod tests {
 
     fn solve(goal: &[(Id, u16)]) -> Solution {
         let plan = Plan::new(goal);
-        search(&plan, &cfg(), 500, 2_000_000).expect("no build found")
+        search(&plan, &cfg(), 500, 2_000_000, &mut Progress::hidden()).expect("no build found")
     }
 
     #[test]
