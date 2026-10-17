@@ -431,9 +431,9 @@ impl BuildOptimizer {
     fn render_palette(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let groups = [
             ("Units", Kind::Army),
+            ("Research", Kind::Research),
             ("Economy", Kind::Economy),
             ("Structures", Kind::Structure),
-            ("Research", Kind::Research),
         ];
         let counts = self.goal.clone().unwrap_or_default();
         v_flex().gap_3().child(section_label("Add to goal", cx)).children(groups.into_iter().map(|(title, kind)| {
