@@ -47,8 +47,8 @@ extra workers, supply, gas, production and expanding.
 ## Limitations
 
 - Large goals (20+ units) can hit the search budget. You still get the best build found,
-  marked as not proven. Raise `--max-states` to search longer (about 1 GB per million states).
-- The start is 12 workers and 1 town hall on a fixed map model; expansion walking time
-  is set with `--expand-travel`.
+  and the output marks it as not proven. Raise `--max-states` to search longer (about 1 GB per million states).
+- Every build starts with 12 workers and 1 town hall on a fixed map model. Set the walking
+  time to a new expansion with `--expand-travel`.
 - Not modeled: archons, motherships, macro command centers, scans, supply drops,
   add-on swapping and proxy structures.
