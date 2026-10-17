@@ -144,13 +144,35 @@ impl Plan {
         self.charged[slot(id)]
     }
 
-    /// An item the goal needs more than 200 of. A 200-supply army never does,
-    /// and the simulation stores counts as u8.
-    pub fn oversized(&self) -> Option<Id> {
-        self.race.items().find(|&id| {
+    /// Rejects goals no build can reach: more than 200 of one item (the
+    /// simulation stores counts as u8), or more supply than the cap.
+    pub fn check(&self) -> Result<(), String> {
+        for id in self.race.items() {
             let units = (initial_count(id) as u32 + self.required(id) as u32) * data::def(id).yields as u32;
-            self.goal(id) > 200 || units > 200
-        })
+            let units = units.max(self.goal(id) as u32);
+            if units > 200 {
+                return Err(format!("goal uses {units} {} (limit 200)", data::def(id).name));
+            }
+        }
+        let supply = self.min_supply();
+        if supply > data::MAX_SUPPLY {
+            return Err(format!("goal uses {} supply (limit 200)", supply.div_ceil(2)));
+        }
+        Ok(())
+    }
+
+    /// Supply the goal holds at the end, in half units. Terran and Protoss
+    /// also keep their starting workers; Zerg can spend drones on buildings.
+    fn min_supply(&self) -> u32 {
+        let worker = self.race.worker();
+        self.race
+            .items()
+            .map(|id| {
+                let n = self.goal(id);
+                let n = if id == worker && self.race != Race::Zerg { n.max(data::START_WORKERS) } else { n };
+                n as u32 * unit_supply(id)
+            })
+            .sum()
     }
 
     pub fn describe(goal: &[(Id, u16)]) -> String {
@@ -162,6 +184,16 @@ impl Plan {
 }
 
 /// What the player starts with on a standard ladder map.
+/// Supply of one unit in half units, including what its morph sources cost.
+fn unit_supply(id: Id) -> u32 {
+    let def = data::def(id);
+    let own = def.supply / def.yields as u32;
+    match def.source {
+        Source::Morph(src) => own + unit_supply(src),
+        _ => own,
+    }
+}
+
 pub fn initial_count(id: Id) -> u16 {
     let race = data::race(id);
     if id == race.worker() {
@@ -219,9 +251,23 @@ mod tests {
 
     #[test]
     fn rejects_more_than_a_maxed_army() {
-        assert_eq!(Plan::new(&[(Zergling, 200)]).oversized(), None);
-        assert_eq!(Plan::new(&[(Zergling, 202)]).oversized(), Some(Zergling));
-        assert_eq!(Plan::new(&[(Roach, 150), (Ravager, 100)]).oversized(), Some(Roach));
+        assert!(Plan::new(&[(Zergling, 200)]).check().is_ok());
+        assert!(Plan::new(&[(Zergling, 202)]).check().unwrap_err().contains("202 Zergling"));
+        assert_eq!(Plan::new(&[(Roach, 150), (Ravager, 100)]).check().unwrap_err(), "goal uses 250 Roach (limit 200)");
+    }
+
+    #[test]
+    fn rejects_more_supply_than_the_cap() {
+        assert!(Plan::new(&[(Ultralisk, 33)]).check().is_ok());
+        assert_eq!(Plan::new(&[(Ultralisk, 34)]).check().unwrap_err(), "goal uses 204 supply (limit 200)");
+        // Morphs count their source: 67 ravagers are 201 supply.
+        assert!(Plan::new(&[(Ravager, 66)]).check().is_ok());
+        assert!(Plan::new(&[(Ravager, 67)]).check().is_err());
+        // Terran and Protoss keep their 12 starting workers.
+        assert!(Plan::new(&[(Thor, 31)]).check().is_ok());
+        assert!(Plan::new(&[(Thor, 32)]).check().is_err());
+        assert!(Plan::new(&[(Thor, 30), (Scv, 20)]).check().is_ok());
+        assert!(Plan::new(&[(Thor, 30), (Scv, 21)]).check().is_err());
     }
 
     #[test]

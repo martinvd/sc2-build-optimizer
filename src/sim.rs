@@ -157,7 +157,7 @@ pub struct State {
     pub supply_used: u32,
     pub supply_cap: u32,
     // Counts are u8 to keep states small; the search holds millions of them.
-    // `Plan::oversized` rejects goals that could overflow them.
+    // `Plan::check` rejects goals that could overflow them.
     /// Completed and alive, per item slot (individual units).
     done: [u8; N],
     /// In production, per item slot (actions).

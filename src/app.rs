@@ -183,8 +183,8 @@ impl BuildOptimizer {
         let Ok(goal) = self.goal.clone() else { return };
         self.stop();
         let plan = Plan::new(&goal);
-        if let Some(id) = plan.oversized() {
-            self.outcome = Some(Err(format!("The goal needs more than 200 {}.", data::def(id).name)));
+        if let Err(e) = plan.check() {
+            self.outcome = Some(Err(format!("The {e}.")));
             cx.notify();
             return;
         }
