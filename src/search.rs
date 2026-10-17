@@ -26,6 +26,8 @@ pub struct Solution {
     pub state: State,
     /// Tick each of the build's steps completes.
     pub ends: Vec<u32>,
+    /// Minerals and gas banked at each tick.
+    pub bank: Vec<(f32, f32)>,
     pub finish: u32,
     pub explored: usize,
     /// False when the search ran out of budget and this is the best found.
@@ -46,12 +48,16 @@ pub fn search(
     let (rough, _) = best_first(&root, plan, cfg, quick, Pruning::Loose, max_states, progress);
     let (best, outcome) = best_first(&root, plan, cfg, rough, Pruning::Strict, max_states, progress);
     progress.clear();
-    best.map(|(finish, state)| Solution {
-        ends: state.completions(&root),
-        state,
+    best.map(|(finish, state)| {
+        let replay = state.replay(&root);
+        Solution {
+            ends: replay.ends,
+            bank: replay.bank,
+            state,
         finish,
-        explored: outcome.explored,
-        proven: outcome.exhausted,
+            explored: outcome.explored,
+            proven: outcome.exhausted,
+        }
     })
 }
 

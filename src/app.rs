@@ -12,6 +12,7 @@ use gpui_kit::component::button::{Button, ButtonVariants};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::scroll::ScrollableElement;
 use gpui_kit::component::spinner::Spinner;
+use gpui_kit::component::switch::Switch;
 use gpui_kit::component::tag::Tag;
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{
@@ -111,6 +112,8 @@ struct BuildOptimizer {
     running: Option<Running>,
     outcome: Option<Result<Finished, String>>,
     hovered: Option<usize>,
+    /// Whether the timeline shows the minerals and gas banked.
+    show_bank: bool,
 }
 
 impl BuildOptimizer {
@@ -143,6 +146,7 @@ impl BuildOptimizer {
             running: None,
             outcome: None,
             hovered: None,
+            show_bank: true,
         }
     }
 
@@ -794,6 +798,14 @@ impl BuildOptimizer {
                 )
         });
 
+        let bank = self.show_bank.then(|| self.render_bank(build, &grid, cx));
+        let bank_switch = Switch::new("show-bank").checked(self.show_bank).label("Bank").xsmall().on_change(cx.listener(
+            |this, checked: &bool, _, cx| {
+                this.show_bank = *checked;
+                cx.notify();
+            },
+        ));
+
         let legend = h_flex().gap_4().text_xs().text_color(theme.muted_foreground).children(
             Kind::ALL.map(|k| {
                 h_flex().gap_1p5().child(div().size_2().rounded_full().bg(kind_color(k, cx))).child(k.label())
@@ -816,10 +828,11 @@ impl BuildOptimizer {
                     .border_b_1()
                     .border_color(theme.border)
                     .child(div().text_sm().font_semibold().child("Timeline"))
-                    .child(legend),
+                    .child(h_flex().gap_6().child(legend).child(bank_switch)),
             )
             .child(header)
             .child(div().id("timeline-rows").flex_1().min_h_0().overflow_y_scrollbar().children(rows))
+            .children(bank)
             .child(
                 h_flex()
                     .px_3()
@@ -831,6 +844,119 @@ impl BuildOptimizer {
                     .text_color(theme.muted_foreground)
                     .child(div().w(px(10.)).h(px(2.)).bg(theme.primary))
                     .child(format!("Goal complete at {} game time", clock(build.finish))),
+            )
+    }
+}
+
+impl BuildOptimizer {
+    /// Minerals and gas banked over the build, on the timeline's time axis.
+    /// Hovering an action shows what was banked when it started.
+    fn render_bank(&self, build: &Build, grid: &impl Fn() -> Div, cx: &App) -> impl IntoElement {
+        let theme = cx.theme();
+        let (minerals, gas) = (theme.blue, theme.green);
+        let mono = theme.mono_font_family.clone();
+        let peaks = build.peak_bank();
+        let peak = peaks.0.max(peaks.1).max(100.0);
+        let span = build.span() as f32;
+        let hovered = self.hovered.map(|i| build.steps[i].start);
+        let (m, g) = hovered.map_or(peaks, |t| build.bank_at(t));
+        let caption = if hovered.is_some() { "Banked at start" } else { "Peak banked" };
+
+        let value = |color: Hsla, label: &'static str, amount: f32| {
+            h_flex()
+                .gap_1p5()
+                .child(div().size_2().rounded_full().bg(color))
+                .child(div().w(px(56.)).child(label))
+                .child(div().font_family(mono.clone()).text_color(cx.theme().foreground).child(format!("{amount:.0}")))
+        };
+
+        // A centered average over two game seconds softens the drops at each
+        // purchase. The values beside the chart stay exact.
+        let reach = ticks(1.0) as usize;
+        let samples: Vec<(f32, f32)> = (0..build.bank.len())
+            .map(|t| {
+                let window = &build.bank[t.saturating_sub(reach)..(t + reach + 1).min(build.bank.len())];
+                let (m, g) = window.iter().fold((0.0, 0.0), |(m, g), &(bm, bg)| (m + bm, g + bg));
+                (m / window.len() as f32, g / window.len() as f32)
+            })
+            .collect();
+        let chart = canvas(
+            |_, _, _| {},
+            move |bounds, _, window, _| {
+                let at = |t: usize, v: f32| {
+                    point(
+                        bounds.left() + bounds.size.width * (t as f32 / span),
+                        bounds.bottom() - bounds.size.height * (v / peak).min(1.0),
+                    )
+                };
+                for (color, pick) in [(minerals, (|b: &(f32, f32)| b.0) as fn(&(f32, f32)) -> f32), (gas, |b| b.1)] {
+                    let mut fill = PathBuilder::fill();
+                    fill.move_to(point(bounds.left(), bounds.bottom()));
+                    let mut line = PathBuilder::stroke(px(1.5));
+                    for (t, b) in samples.iter().enumerate() {
+                        fill.line_to(at(t, pick(b)));
+                        if t == 0 { line.move_to(at(t, pick(b))) } else { line.line_to(at(t, pick(b))) }
+                    }
+                    fill.line_to(point(bounds.right(), bounds.bottom()));
+                    fill.close();
+                    if let Ok(path) = fill.build() {
+                        window.paint_path(path, color.opacity(0.15));
+                    }
+                    if let Ok(path) = line.build() {
+                        window.paint_path(path, color);
+                    }
+                }
+            },
+        )
+        .size_full();
+
+        h_flex()
+            .h(px(72.))
+            .px_3()
+            .text_xs()
+            .text_color(theme.muted_foreground)
+            .border_t_1()
+            .border_color(theme.border)
+            .child(
+                v_flex()
+                    .w(px(292.))
+                    .gap_1()
+                    .child(caption)
+                    .child(value(minerals, "Minerals", m))
+                    .child(value(gas, "Gas", g)),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .h_full()
+                    .relative()
+                    .py_2()
+                    .child(
+                        div()
+                            .size_full()
+                            .relative()
+                            .child(grid())
+                            .child(chart)
+                            .when_some(hovered, |area, t| {
+                                area.child(
+                                    div()
+                                        .absolute()
+                                        .top_0()
+                                        .bottom_0()
+                                        .left(relative(build.fraction(t)))
+                                        .w_px()
+                                        .bg(cx.theme().foreground.opacity(0.6)),
+                                )
+                            }),
+                    )
+                    .child(
+                        div()
+                            .absolute()
+                            .top_1()
+                            .right_1()
+                            .font_family(cx.theme().mono_font_family.clone())
+                            .child(format!("{peak:.0}")),
+                    ),
             )
     }
 }

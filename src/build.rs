@@ -61,6 +61,8 @@ pub struct Build {
     pub finish: u32,
     pub explored: usize,
     pub proven: bool,
+    /// Minerals and gas banked at each tick, through the span.
+    pub bank: Vec<(f32, f32)>,
 }
 
 impl Build {
@@ -72,7 +74,7 @@ impl Build {
             .zip(&sol.ends)
             .map(|(s, &end)| Step { start: s.tick, end, supply: s.supply.div_ceil(2), id: s.id })
             .collect();
-        Build { steps, finish: sol.finish, explored: sol.explored, proven: sol.proven }
+        Build { steps, finish: sol.finish, explored: sol.explored, proven: sol.proven, bank: sol.bank.clone() }
     }
 
     /// Ticks the timeline covers: until the goal is done or the last action
@@ -90,6 +92,16 @@ impl Build {
     pub fn marks(&self) -> Vec<u32> {
         let span = self.span();
         (0..).map(|i| ticks(MARK_INTERVAL * i as f64)).take_while(|&t| t <= span).collect()
+    }
+
+    /// Minerals and gas banked at `tick`, before anything starts then.
+    pub fn bank_at(&self, tick: u32) -> (f32, f32) {
+        self.bank.get(tick as usize).or(self.bank.last()).copied().unwrap_or_default()
+    }
+
+    /// The most minerals and the most gas banked at any point.
+    pub fn peak_bank(&self) -> (f32, f32) {
+        self.bank.iter().fold((0.0, 0.0), |(m, g), &(bm, bg)| (m.max(bm), g.max(bg)))
     }
 
     pub fn peak_supply(&self) -> u32 {
@@ -226,5 +238,13 @@ mod tests {
         assert_eq!(build.marks()[0], 0);
         assert!(build.marks().windows(2).all(|w| w[1] - w[0] == ticks(30.0)));
         assert_eq!(build.render_timeline(60).lines().count(), build.steps.len() + 1);
+
+        assert_eq!(build.bank.len() as u32, build.span() + 1, "the bank covers the timeline");
+        assert_eq!(build.bank_at(0), (50.0, 0.0));
+        for step in &build.steps {
+            let (m, g) = build.bank_at(step.start);
+            let def = data::def(step.id);
+            assert!(m >= def.minerals as f32 - 1e-3 && g >= def.gas as f32 - 1e-3, "{:?} starts affordable", step.id);
+        }
     }
 }

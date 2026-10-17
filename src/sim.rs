@@ -668,29 +668,41 @@ impl State {
         out
     }
 
-    /// The tick each step of this state's build completes, found by replaying
-    /// the build from `root`. Chrono boosts make this differ from the build time.
-    pub fn completions(&self, root: &State) -> Vec<u32> {
+    /// Replays this state's build from `root`, recording the tick each step
+    /// completes and what is banked along the way. Chrono boosts make the
+    /// completions differ from the build time.
+    pub fn replay(&self, root: &State) -> Replay {
         let steps = self.steps();
         let mut ends = vec![0; steps.len()];
-        let mut record = |step: u16, tick: u32| ends[step as usize] = tick;
         let mut s = root.clone();
+        let mut bank = vec![(s.minerals as f32, s.gas as f32)];
+        let mut advance = |s: &mut State| {
+            s.advance_with(&mut |step: u16, tick: u32| ends[step as usize] = tick);
+            bank.push((s.minerals as f32, s.gas as f32));
+        };
         for step in &steps {
             // Reserved at the decision, which follows the previous step's start.
             if reserves_gas(step.id) {
                 s.gas_budget += data::def(step.id).gas;
             }
             while s.tick < step.tick {
-                s.advance_with(&mut record);
+                advance(&mut s);
             }
             debug_assert_eq!(s.status(step.id), Status::Ready, "replay diverged at {:?}", step.id);
             s.begin(step.id);
         }
         while !s.jobs.is_empty() {
-            s.advance_with(&mut record);
+            advance(&mut s);
         }
-        ends
+        Replay { ends, bank }
     }
+}
+
+pub struct Replay {
+    /// Tick each step completes.
+    pub ends: Vec<u32>,
+    /// Minerals and gas banked at each tick, before anything starts that tick.
+    pub bank: Vec<(f32, f32)>,
 }
 
 #[cfg(test)]
@@ -805,7 +817,7 @@ mod tests {
         let s = State::start(&plan, &cfg).wait_and_begin(Id::Probe, cfg.horizon).unwrap();
         // The nexus starts with enough energy and chronos the probe on the next tick.
         assert_eq!(s.finish(&plan, cfg.horizon), Some(1 + (47.0f64 / 1.5).ceil() as u32));
-        assert_eq!(s.completions(&State::start(&plan, &cfg)), [1 + 32]);
+        assert_eq!(s.replay(&State::start(&plan, &cfg)).ends, [1 + 32]);
     }
 
     #[test]
