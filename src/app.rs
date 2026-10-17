@@ -487,31 +487,61 @@ impl BuildOptimizer {
             .child(stepper(
                 "travel",
                 "Worker walk to natural",
+                "Seconds the worker that builds the expansion spends walking there, mining nothing meanwhile.",
                 format!("{}s", cfg.expand_travel),
                 cfg.expand_travel > 0.0,
                 cfg.expand_travel < 40.0,
                 |this, d| this.cfg.expand_travel = (this.cfg.expand_travel + d as f64).clamp(0.0, 40.0),
                 cx,
             ))
-            .child(count_stepper("expansions", "Expansions", cfg.max_expansions, 0, 3, |c| &mut c.max_expansions, cx))
-            .child(count_stepper("extractors", "Gas buildings", cfg.max_extractors, 0, 6, |c| &mut c.max_extractors, cx))
+            .child(count_stepper(
+                "expansions",
+                "Expansions",
+                "Most extra bases the search may take, unless the goal asks for more.",
+                cfg.max_expansions,
+                0,
+                3,
+                |c| &mut c.max_expansions,
+                cx,
+            ))
+            .child(count_stepper(
+                "extractors",
+                "Gas buildings",
+                "Most gas buildings the search may build. Goals without gas get at most one, for tech and add-ons.",
+                cfg.max_extractors,
+                0,
+                6,
+                |c| &mut c.max_extractors,
+                cx,
+            ))
             .when(zerg, |settings| {
                 settings
                     .child(count_stepper(
                         "macro",
                         "Macro hatcheries",
+                        "Most extra hatcheries built in-base for larvae rather than mining.",
                         cfg.max_macro_hatcheries,
                         0,
                         3,
                         |c| &mut c.max_macro_hatcheries,
                         cx,
                     ))
-                    .child(count_stepper("queens", "Queens for injects", cfg.max_queens, 0, 4, |c| &mut c.max_queens, cx))
+                    .child(count_stepper(
+                        "queens",
+                        "Queens for injects",
+                        "Most queens built for larva injects, never more than one per base.",
+                        cfg.max_queens,
+                        0,
+                        4,
+                        |c| &mut c.max_queens,
+                        cx,
+                    ))
             })
             .when(!zerg, |settings| {
                 settings.child(count_stepper(
                     "production",
                     "Production per type",
+                    "Most structures of each production type, such as barracks or gateways.",
                     cfg.max_production,
                     1,
                     6,
@@ -522,6 +552,7 @@ impl BuildOptimizer {
             .child(stepper(
                 "budget",
                 "Search budget",
+                "States to explore before stopping with the best build found so far. Higher is slower but more likely to find the fastest build.",
                 format!("{} states", short_count(STATE_BUDGETS[self.budget])),
                 self.budget > 0,
                 self.budget + 1 < STATE_BUDGETS.len(),
@@ -874,6 +905,7 @@ fn empty_state(icon: IconName, title: &'static str, body: &str, cx: &App) -> imp
 fn stepper(
     id: &'static str,
     label: &'static str,
+    hint: &'static str,
     value: String,
     can_dec: bool,
     can_inc: bool,
@@ -885,7 +917,14 @@ fn stepper(
         .h_8()
         .justify_between()
         .text_sm()
-        .child(label)
+        .child(
+            h_flex()
+                .id(id)
+                .gap_1()
+                .child(label)
+                .child(Icon::new(IconName::Info).xsmall().text_color(cx.theme().muted_foreground))
+                .tooltip(move |window, cx| Tooltip::new(hint).build(window, cx)),
+        )
         .child(
             h_flex()
                 .gap_1()
@@ -925,6 +964,7 @@ fn stepper(
 fn count_stepper(
     id: &'static str,
     label: &'static str,
+    hint: &'static str,
     value: u16,
     min: u16,
     max: u16,
@@ -934,6 +974,7 @@ fn count_stepper(
     stepper(
         id,
         label,
+        hint,
         value.to_string(),
         value > min,
         value < max,
