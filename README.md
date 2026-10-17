@@ -1,21 +1,33 @@
 # sc2-build-optimizer
 
 Finds the fastest StarCraft II build order to reach a goal, for Zerg, Terran and Protoss.
+It comes as a desktop app and as a command-line tool, both in the same binary.
 
 ## Usage
+
+### Desktop app
+
+```
+cargo run --release
+```
+
+Run with no arguments to open the desktop app, built with [GPUI Kit](https://gpui-kit.com).
+
+### Command line
 
 ```
 cargo run --release -- 10 roaches
 ```
 
-This prints the build as a table of start times, supply and actions, plus the time the
-goal is done. Add `--timeline` for a chart of when each action is in production.
+Pass a goal to run in the terminal instead. This prints the build as a table of start
+times, supply and actions, plus the time the goal is done. Add `--timeline` for a chart of
+when each action is in production. Run with `--help` for all options.
 
-Run with no arguments to open the desktop app, built with [GPUI Kit](https://gpui-kit.com).
+### Goals
 
 Goals accept counts and common names, for example `"5 roaches"`, `"roach=8, ravager=2"`,
 `"20 lings and ling speed"`, `"6 marines and stim"` or `"4 stalkers and blink"`. The units
-in the goal decide the race. Run with `--help` for all options.
+in the goal decide the race.
 
 ## How it works
 
