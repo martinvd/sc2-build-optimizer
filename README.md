@@ -31,19 +31,21 @@ in the goal set the race.
 
 ## How it works
 
-A 0.25s tick simulation models mining, supply, larva, injects, MULEs, chrono boost and
-warp-ins. A search runs the simulation to pick which action to start next. It also chooses
-when to add workers, supply, gas, production and expansions. By default it takes at most 1
-expansion, 2 gas buildings, 3 production structures of each type and 2 queens, and builds
-no macro hatcheries. Change these limits in the app's Model settings, or see `--help` for
-the CLI options.
+A simulation steps through the game in 0.25s ticks. It models mining, supply, larva,
+injects, MULEs, chrono boost and warp-ins. A search uses it to pick what to start next,
+including workers, supply, gas and expansions.
 
-## Limitations
+Each build starts with 12 workers and 1 town hall. By default the search stays within
+these limits, which you can change in the app's Model settings or with the CLI options:
 
-- Large goals (20+ units) can hit the search budget. You still get the best build found,
-  and the output marks it as not proven. Raise `--max-states` to search longer (about 1 GB
-  per million states).
-- Every build starts with 12 workers and 1 town hall, with fixed mining rates per mineral
-  patch. Set the worker walk time to the natural with `--expand-travel`.
-- Not modeled: archons, motherships, macro command centers, scans, supply drops,
-  add-on swapping and proxy structures.
+- 1 expansion, with a 12 second worker walk to it
+- 2 gas buildings
+- 3 production structures of each type
+- 2 queens and no macro hatcheries
+- 1 million search states, about 1 GB of memory
+
+Goals of 20 or more units can hit the state limit. You then get the best build found, and
+the output marks it as not proven fastest.
+
+The simulation does not model archons, motherships, macro command centers, scans, supply
+drops, add-on swapping or proxy structures.
