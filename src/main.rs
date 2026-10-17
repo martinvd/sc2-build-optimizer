@@ -15,7 +15,7 @@ use std::process::ExitCode;
 use table::{Align, Table};
 
 const USAGE: &str = "\
-Find the fastest Zerg build order to reach a goal.
+Find the fastest StarCraft II build order to reach a goal.
 
 Usage: sc2-build-optimizer [options] <goal>
        sc2-build-optimizer      (no arguments opens the app)
@@ -24,13 +24,19 @@ Goal examples:
   \"5 roaches\"
   \"roach=8, ravager=2\"
   \"20 lings and ling speed\"
+  \"6 marines and stim\"
+  \"4 stalkers, blink\"
 
 Options:
-  --expand-travel <sec>   Drone walk time to the natural (default 12)
+  --race <race>           Zerg, Terran or Protoss, for names any race could mean,
+                          like \"gas\" (default: the goal's race, else Zerg)
+  --expand-travel <sec>   Worker walk time to the natural (default 12)
   --max-expansions <n>    Expansions the search may take (default 1)
-  --macro-hatcheries <n>  In-base macro hatcheries allowed (default 0)
-  --max-extractors <n>    Extractors allowed (default 2)
-  --max-queens <n>        Queens allowed for injects (default 2)
+  --max-extractors <n>    Gas buildings allowed (default 2)
+  --max-production <n>    Terran and Protoss structures allowed of each
+                          production type, like barracks (default 3)
+  --macro-hatcheries <n>  Zerg in-base macro hatcheries allowed (default 0)
+  --max-queens <n>        Zerg queens allowed for injects (default 2)
   --beam-width <n>        States kept per step by the quick first pass (default 2000)
   --max-states <n>        Exact search budget before settling for the best found (default 1000000)
   --timeline              Also chart when each action is in production
@@ -57,8 +63,10 @@ fn run() -> Result<(), String> {
         max_macro_hatcheries: 0,
         max_extractors: 2,
         max_queens: 2,
+        max_production: 3,
         horizon: ticks(20.0 * 60.0),
     };
+    let mut race = data::Race::Zerg;
     let mut max_states = 1_000_000;
     let mut beam_width = 2000;
     let mut timeline = false;
@@ -80,6 +88,11 @@ fn run() -> Result<(), String> {
             "--macro-hatcheries" => cfg.max_macro_hatcheries = number(&arg, value(&arg)?)? as u16,
             "--max-extractors" => cfg.max_extractors = number(&arg, value(&arg)?)? as u16,
             "--max-queens" => cfg.max_queens = number(&arg, value(&arg)?)? as u16,
+            "--max-production" => cfg.max_production = number(&arg, value(&arg)?)? as u16,
+            "--race" => {
+                let v = value(&arg)?;
+                race = data::Race::parse(&v).ok_or_else(|| format!("--race: unknown race {v}"))?;
+            }
             "--beam-width" => beam_width = number(&arg, value(&arg)?)? as usize,
             "--max-states" => max_states = number(&arg, value(&arg)?)? as usize,
             "--timeline" => timeline = true,
@@ -88,12 +101,12 @@ fn run() -> Result<(), String> {
         }
     }
 
-    let goal = plan::parse_goal(&goal_words.join(" "))?;
+    let goal = plan::parse_goal(&goal_words.join(" "), race)?;
     let plan = Plan::new(&goal);
     if let Some(id) = plan.oversized() {
         return Err(format!("goal needs more than 200 {}", data::def(id).name));
     }
-    println!("Goal: {}\n", Plan::describe(&goal));
+    println!("Goal: {} ({})\n", Plan::describe(&goal), plan.race.name());
 
     let sol = search::search(&plan, &cfg, beam_width, max_states, &mut Progress::stderr())
         .ok_or("no build order reaches this goal within 20 minutes")?;

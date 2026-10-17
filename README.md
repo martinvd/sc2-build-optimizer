@@ -1,10 +1,10 @@
 # sc2-build-optimizer
 
-Finds the fastest StarCraft II build order to reach a goal. Zerg for now.
+Finds the fastest StarCraft II build order to reach a goal, for Zerg, Terran and Protoss.
 
 ```
 $ cargo run --release -- 10 roaches
-Goal: 10 Roach
+Goal: 10 Roach (Zerg)
 
 ┌───────┬────────┬───────────────┐
 │ Start │ Supply │ Action        │
@@ -43,22 +43,30 @@ While it searches, a status line on stderr shows the pass, states explored and t
 best build found so far. It only appears when stderr is a terminal.
 
 Run it with no arguments to open the desktop app, built with
-[GPUI Kit](https://gpui-kit.com). Type a goal or click units to add them, adjust the
-model settings, and press Enter. The app draws the fastest build as a timeline of
+[GPUI Kit](https://gpui-kit.com). Pick a race, type a goal or click units to add them,
+adjust the model settings, and press Enter. The app draws the fastest build as a timeline of
 when each action is in production. `--timeline` prints the same chart in the terminal.
 
 Goals accept counts and common names: `"5 roaches"`, `"roach=8, ravager=2"`,
-`"20 lings and ling speed"`, `"5 mutas"`, `"glial"`. Run with `--help` for options.
+`"20 lings and ling speed"`, `"6 marines and stim"`, `"2 tanks"`, `"4 stalkers and blink"`.
+The goal's units decide the race. Names any race could mean, like `"gas"` or
+`"worker"`, follow the rest of the goal, or `--race` (Zerg by default). Run with
+`--help` for options.
 
 ## How it works
 
-- **`data.rs`**: the Zerg tech tree with costs, build times (real seconds at Faster
-  speed, LotV 5.0.x) and game constants (mining rates, larva, injects). Verify
-  numbers here against Liquipedia, since the rest of the code depends on them.
-- **`plan.rs`**: turns a goal into everything that must be built, including tech
-  prerequisites and morph sources (ravagers need roaches).
-- **`sim.rs`**: a 0.25s tick simulation. Drones mine, the simulation puts workers on gas
-  only while the build still needs gas, and queens inject whenever they have energy.
+- **`data.rs`**: all three tech trees with costs, build times (real seconds at Faster
+  speed; Terran and Protoss checked against patch 5.0.17) and game constants (mining
+  rates, larva, injects, MULEs, chrono boost, warp-in). Verify numbers here against
+  Liquipedia, since the rest of the code depends on them.
+- **`plan.rs`**: parses a goal and turns it into everything that must be built,
+  including tech prerequisites, morph sources (ravagers need roaches) and add-ons
+  (marauders need a barracks tech lab).
+- **`sim.rs`**: a 0.25s tick simulation. Workers mine, and the simulation puts workers
+  on gas only while the build still needs gas. Queens inject, orbital commands call
+  down MULEs, and nexuses chrono boost the structure with the most production left,
+  all whenever they have the energy. Each production structure tracks its own
+  queue, so reactors train two units at once and warp gates cool down.
 - **`build.rs`**: the finished build that the CLI and the app both display. It
   holds each action's production window and category, the time axis, and goal editing.
 - **`app.rs`**: the desktop app.
@@ -71,25 +79,36 @@ Goals accept counts and common names: `"5 roaches"`, `"roach=8, ravager=2"`,
   4. A best-first search with strict merging improves on that bound or confirms it.
      Admissible lower bounds (tech critical path, gas, larva, minerals) prune it.
 
-The search decides on its own about extra drones, overlords, queens, extractors
-and taking an expansion.
+The search decides on its own about extra workers, supply, gas, and taking an
+expansion. Zerg adds queens; Terran adds orbital commands, extra barracks,
+factories and starports, and reactors or tech labs; Protoss adds extra gateways,
+robotics facilities and stargates, and Warp Gate.
 
 ## Model assumptions
 
-- 12 drones, 1 hatchery, 1 overlord, 50 minerals at 0:00. Workers mine at
-  0.94/s for 2 per patch, 0.40/s for a third, and gas at 0.89/s per worker.
-- Expanding costs the 300 minerals plus the mining lost while a drone walks to
+- 12 workers, 1 town hall, 50 minerals at 0:00 (plus 1 overlord for Zerg).
+  Workers mine at 0.94/s for 2 per patch, 0.40/s for a third, and gas at 0.89/s
+  per worker.
+- Expanding costs the town hall plus the mining lost while a worker walks to
   the natural (`--expand-travel`, default 12s; this depends on the map).
-- Drones building in the main lose no walking time. Larva, inject and queen
-  energy follow the game rules. A new hatchery spawns with 1 larva.
+- Workers building in the main lose no walking time. A drone is consumed, an SCV
+  mines nothing until its structure is done, and a probe loses no time at all.
+- Larva, inject and energy follow the game rules. A new hatchery spawns with 1
+  larva; every nexus, new ones included, starts with 50 energy.
+- Chrono boost always goes to the structure with the most production left, which
+  is a reasonable habit rather than the best possible use. Gateways turn into
+  warp gates the moment Warp Gate finishes, and units warp in at a fast field.
+- Optional items that cost gas (a factory, a reactor, Warp Gate) have workers
+  start mining their gas only once the search picks them.
 - "Fastest under the model" means no build the model allows is faster, apart
   from what the state merging drops. That merging is a heuristic: it ignores
-  larva timers and queen energy.
+  larva timers, energy and warp gate cooldowns.
 
 ## Limitations
 
-- Large goals (20+ units) hit the default search budget. You still get the best
-  build found, labeled as not proven. Raise `--max-states` to search longer, at
-  roughly 1 GB of memory per million states.
-- Only Zerg. Adding a race means a new data table and its production rules
-  (chrono boost, MULEs, add-ons).
+- Large goals (20+ units) hit the default search budget, and so do many Terran
+  and Protoss goals with several production structures to choose from. You still
+  get the best build found, labeled as not proven. Raise `--max-states` to search
+  longer, at roughly 1 GB of memory per million states.
+- Not modeled: archons, motherships, Terran macro command centers, scans and
+  supply drops, lifting off and swapping add-ons, and proxy structures.

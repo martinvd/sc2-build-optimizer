@@ -3,7 +3,7 @@
 //! action is in production.
 
 use crate::build::{self, Build, Kind};
-use crate::data::{self, Id};
+use crate::data::{self, Id, Race};
 use crate::plan::{self, Plan};
 use crate::progress::{self, Progress, Snapshot};
 use crate::search;
@@ -26,14 +26,35 @@ use std::time::{Duration, Instant};
 const POLL: Duration = Duration::from_millis(80);
 const SIDEBAR_WIDTH: Pixels = px(340.);
 const STATE_BUDGETS: [usize; 6] = [250_000, 500_000, 1_000_000, 2_000_000, 4_000_000, 8_000_000];
-const PRESETS: [&str; 6] = [
-    "10 roaches",
-    "roach=8, ravager=2",
-    "20 lings and ling speed",
-    "5 mutas",
-    "glial",
-    "8 hydras and hydra range",
-];
+
+fn presets(race: Race) -> [&'static str; 6] {
+    match race {
+        Race::Zerg => [
+            "10 roaches",
+            "roach=8, ravager=2",
+            "20 lings and ling speed",
+            "5 mutas",
+            "glial",
+            "8 hydras and hydra range",
+        ],
+        Race::Terran => [
+            "10 marines",
+            "6 marines and stim",
+            "4 marauders, 2 medivacs",
+            "2 tanks",
+            "4 hellions",
+            "banshee and cloak",
+        ],
+        Race::Protoss => [
+            "4 stalkers",
+            "4 stalkers and blink",
+            "8 zealots and charge",
+            "2 immortals",
+            "2 oracles",
+            "2 colossi",
+        ],
+    }
+}
 
 pub fn run() {
     gpui_kit::application().with_assets(gpui_kit::assets::Assets).run(|cx| {
@@ -79,6 +100,9 @@ struct Running {
 
 struct BuildOptimizer {
     input: Entity<InputState>,
+    /// The race the palette and presets show. It follows the goal, and
+    /// decides names any race could mean, like "gas".
+    race: Race,
     /// The goal as parsed from the input, or why it does not parse.
     goal: Result<Vec<(Id, u16)>, String>,
     cfg: Config,
@@ -91,11 +115,11 @@ struct BuildOptimizer {
 
 impl BuildOptimizer {
     fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let first = PRESETS[0];
+        let first = presets(Race::Zerg)[0];
         let input = cx.new(|cx| InputState::new(window, cx).placeholder("e.g. 8 roaches and glial").default_value(first));
         cx.subscribe_in(&input, window, |this, input, event: &InputEvent, _, cx| match event {
             InputEvent::Change => {
-                this.goal = plan::parse_goal(&input.read(cx).value());
+                this.parse(&input.read(cx).value());
                 cx.notify();
             }
             InputEvent::PressEnter { .. } => this.start(cx),
@@ -104,13 +128,15 @@ impl BuildOptimizer {
         .detach();
         BuildOptimizer {
             input,
-            goal: plan::parse_goal(first),
+            race: Race::Zerg,
+            goal: plan::parse_goal(first, Race::Zerg),
             cfg: Config {
                 expand_travel: 12.0,
                 max_expansions: 1,
                 max_macro_hatcheries: 0,
                 max_extractors: 2,
                 max_queens: 2,
+                max_production: 3,
                 horizon: ticks(20.0 * 60.0),
             },
             budget: 2,
@@ -128,8 +154,23 @@ impl BuildOptimizer {
 
     fn set_text(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) {
         self.input.update(cx, |input, cx| input.set_value(text.to_string(), window, cx));
-        self.goal = plan::parse_goal(text);
+        self.parse(text);
         cx.notify();
+    }
+
+    fn parse(&mut self, text: &str) {
+        self.goal = plan::parse_goal(text, self.race);
+        if let Ok(goal) = &self.goal {
+            self.race = data::race(goal[0].0);
+        }
+    }
+
+    /// Switches race, starting over from its first preset.
+    fn set_race(&mut self, race: Race, window: &mut Window, cx: &mut Context<Self>) {
+        if race != self.race {
+            self.race = race;
+            self.set_text(presets(race)[0], window, cx);
+        }
     }
 
     fn adjust(&mut self, id: Id, actions: i32, window: &mut Window, cx: &mut Context<Self>) {
@@ -231,9 +272,14 @@ impl BuildOptimizer {
                 .child(
                     h_flex()
                         .gap_2()
-                        .child(logo(cx))
+                        .child(logo(self.race, cx))
                         .child(div().text_sm().font_semibold().child("Build Optimizer"))
-                        .child(div().text_xs().text_color(cx.theme().muted_foreground).child("Zerg · LotV 5.0")),
+                        .child(
+                            div()
+                                .text_xs()
+                                .text_color(cx.theme().muted_foreground)
+                                .child(format!("{} · LotV 5.0", self.race.name())),
+                        ),
                 )
                 .child(
                     Button::new("theme")
@@ -355,17 +401,24 @@ impl BuildOptimizer {
                 .into_any_element(),
         };
 
+        let races = h_flex().gap_1().children(Race::ALL.into_iter().enumerate().map(|(i, race)| {
+            let button = Button::new(("race", i)).small().flex_1().label(race.name());
+            let button = if race == self.race { button.primary() } else { button.outline() };
+            button.on_click(cx.listener(move |this, _, window, cx| this.set_race(race, window, cx)))
+        }));
+
         v_flex()
             .gap_2()
             .child(section_label("Goal", cx))
+            .child(races)
             .child(Input::new(&self.input).prefix(Icon::new(IconName::Search).small()).cleanable(true))
             .child(tags)
             .child(
-                h_flex().flex_wrap().gap_1().pt_1().children(PRESETS.iter().enumerate().map(|(i, preset)| {
+                h_flex().flex_wrap().gap_1().pt_1().children(presets(self.race).into_iter().enumerate().map(|(i, preset)| {
                     Button::new(("preset", i))
                         .outline()
                         .xsmall()
-                        .label(*preset)
+                        .label(preset)
                         .on_click(cx.listener(move |this, _, window, cx| this.set_text(preset, window, cx)))
                 })),
             )
@@ -391,7 +444,7 @@ impl BuildOptimizer {
                         .child(div().size_1p5().rounded_full().bg(color))
                         .child(title),
                 )
-                .child(h_flex().flex_wrap().gap_1().children(data::all().filter(|&id| Kind::of(id) == kind).map(|id| {
+                .child(h_flex().flex_wrap().gap_1().children(self.race.items().filter(|&id| Kind::of(id) == kind).map(|id| {
                     let def = data::def(id);
                     let have = counts.iter().find(|(g, _)| *g == id).map(|g| g.1);
                     let theme = cx.theme();
@@ -427,12 +480,13 @@ impl BuildOptimizer {
 
     fn render_settings(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let cfg = self.cfg;
+        let zerg = self.race == Race::Zerg;
         v_flex()
             .gap_1()
             .child(section_label("Model", cx))
             .child(stepper(
                 "travel",
-                "Drone walk to natural",
+                "Worker walk to natural",
                 format!("{}s", cfg.expand_travel),
                 cfg.expand_travel > 0.0,
                 cfg.expand_travel < 40.0,
@@ -440,17 +494,31 @@ impl BuildOptimizer {
                 cx,
             ))
             .child(count_stepper("expansions", "Expansions", cfg.max_expansions, 0, 3, |c| &mut c.max_expansions, cx))
-            .child(count_stepper(
-                "macro",
-                "Macro hatcheries",
-                cfg.max_macro_hatcheries,
-                0,
-                3,
-                |c| &mut c.max_macro_hatcheries,
-                cx,
-            ))
-            .child(count_stepper("extractors", "Extractors", cfg.max_extractors, 0, 6, |c| &mut c.max_extractors, cx))
-            .child(count_stepper("queens", "Queens for injects", cfg.max_queens, 0, 4, |c| &mut c.max_queens, cx))
+            .child(count_stepper("extractors", "Gas buildings", cfg.max_extractors, 0, 6, |c| &mut c.max_extractors, cx))
+            .when(zerg, |settings| {
+                settings
+                    .child(count_stepper(
+                        "macro",
+                        "Macro hatcheries",
+                        cfg.max_macro_hatcheries,
+                        0,
+                        3,
+                        |c| &mut c.max_macro_hatcheries,
+                        cx,
+                    ))
+                    .child(count_stepper("queens", "Queens for injects", cfg.max_queens, 0, 4, |c| &mut c.max_queens, cx))
+            })
+            .when(!zerg, |settings| {
+                settings.child(count_stepper(
+                    "production",
+                    "Production per type",
+                    cfg.max_production,
+                    1,
+                    6,
+                    |c| &mut c.max_production,
+                    cx,
+                ))
+            })
             .child(stepper(
                 "budget",
                 "Search budget",
@@ -736,7 +804,7 @@ impl BuildOptimizer {
     }
 }
 
-fn logo(cx: &App) -> impl IntoElement {
+fn logo(race: Race, cx: &App) -> impl IntoElement {
     let theme = cx.theme();
     div()
         .size(px(20.))
@@ -752,7 +820,7 @@ fn logo(cx: &App) -> impl IntoElement {
         .text_color(white())
         .text_xs()
         .font_bold()
-        .child("Z")
+        .child(&race.name()[..1])
 }
 
 fn section_label(text: &'static str, cx: &App) -> impl IntoElement {

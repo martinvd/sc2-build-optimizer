@@ -24,11 +24,12 @@ impl Kind {
     pub const ALL: [Kind; 4] = [Kind::Economy, Kind::Army, Kind::Structure, Kind::Research];
 
     pub fn of(id: Id) -> Kind {
+        let race = data::race(id);
         if data::is_economy(id) {
             Kind::Economy
-        } else if (id as usize) < Id::Hatchery as usize {
+        } else if id < race.town_hall() {
             Kind::Army
-        } else if (id as usize) < Id::MetabolicBoost as usize {
+        } else if id < race.first_research() {
             Kind::Structure
         } else {
             Kind::Research
@@ -68,13 +69,8 @@ impl Build {
             .state
             .steps()
             .iter()
-            .map(|s| Step {
-                start: s.tick,
-                // Matches the job the simulation queues in `State::begin`.
-                end: s.tick + ticks(data::def(s.id).time),
-                supply: s.supply.div_ceil(2),
-                id: s.id,
-            })
+            .zip(&sol.ends)
+            .map(|(s, &end)| Step { start: s.tick, end, supply: s.supply.div_ceil(2), id: s.id })
             .collect();
         Build { steps, finish: sol.finish, explored: sol.explored, proven: sol.proven }
     }
@@ -163,6 +159,7 @@ pub fn adjust(goal: &mut Vec<(Id, u16)>, id: Id, actions: i32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data::Race;
     use crate::plan::{Plan, parse_goal};
     use crate::progress::Progress;
     use crate::search::search;
@@ -170,8 +167,10 @@ mod tests {
 
     #[test]
     fn goal_text_parses_back() {
-        let goal: Vec<(Id, u16)> = data::all().zip(1..).collect();
-        assert_eq!(parse_goal(&goal_text(&goal)), Ok(goal));
+        for race in Race::ALL {
+            let goal: Vec<(Id, u16)> = race.items().zip(1..).collect();
+            assert_eq!(parse_goal(&goal_text(&goal), Race::Zerg), Ok(goal));
+        }
     }
 
     #[test]
@@ -193,6 +192,16 @@ mod tests {
         assert_eq!(Kind::of(Id::SpawningPool), Kind::Structure);
         assert_eq!(Kind::of(Id::UltraliskCavern), Kind::Structure);
         assert_eq!(Kind::of(Id::MetabolicBoost), Kind::Research);
+        assert_eq!(Kind::of(Id::Scv), Kind::Economy);
+        assert_eq!(Kind::of(Id::OrbitalCommand), Kind::Economy);
+        assert_eq!(Kind::of(Id::Battlecruiser), Kind::Army);
+        assert_eq!(Kind::of(Id::Barracks), Kind::Structure);
+        assert_eq!(Kind::of(Id::StarportReactor), Kind::Structure);
+        assert_eq!(Kind::of(Id::ShipWeapons1), Kind::Research);
+        assert_eq!(Kind::of(Id::Carrier), Kind::Army);
+        assert_eq!(Kind::of(Id::Pylon), Kind::Economy);
+        assert_eq!(Kind::of(Id::FleetBeacon), Kind::Structure);
+        assert_eq!(Kind::of(Id::WarpGate), Kind::Research);
     }
 
     #[test]
@@ -203,9 +212,10 @@ mod tests {
             max_macro_hatcheries: 0,
             max_extractors: 2,
             max_queens: 2,
+            max_production: 3,
             horizon: ticks(900.0),
         };
-        let plan = Plan::new(&parse_goal("3 roaches").unwrap());
+        let plan = Plan::new(&parse_goal("3 roaches", Race::Zerg).unwrap());
         let sol = search(&plan, &cfg, 500, 2_000_000, &mut Progress::hidden()).unwrap();
         let build = Build::new(&sol);
 
