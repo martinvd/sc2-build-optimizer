@@ -127,6 +127,7 @@ fn run() -> Result<(), String> {
         ]);
     }
     print!("{}", table.render());
+    println!("\n{}", build.summary());
     if timeline {
         println!("\n{}", build.render_timeline(72));
     }

@@ -108,6 +108,27 @@ impl Build {
         self.steps.iter().map(|s| s.supply).max().unwrap_or(0)
     }
 
+    /// The build in the supply notation players write, like "17 Hatchery,
+    /// 18 Extractor, 17 Spawning Pool". Workers are left out, and repeats of
+    /// the same action in a row fold into one entry with a count.
+    pub fn summary(&self) -> String {
+        let mut entries: Vec<(u32, Id, usize)> = Vec::new();
+        for step in self.steps.iter().filter(|s| s.id != data::race(s.id).worker()) {
+            match entries.last_mut() {
+                Some((_, id, n)) if *id == step.id => *n += 1,
+                _ => entries.push((step.supply, step.id, 1)),
+            }
+        }
+        entries
+            .iter()
+            .map(|&(supply, id, n)| match n {
+                1 => format!("{supply} {}", data::def(id).name),
+                _ => format!("{supply} {} x{n}", data::def(id).name),
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
     /// The timeline as text, one bar per action, `width` columns wide.
     pub fn render_timeline(&self, width: usize) -> String {
         let col = |tick: u32| ((self.fraction(tick) * width as f32).round() as usize).min(width);
@@ -238,6 +259,11 @@ mod tests {
         assert_eq!(build.marks()[0], 0);
         assert!(build.marks().windows(2).all(|w| w[1] - w[0] == ticks(30.0)));
         assert_eq!(build.render_timeline(60).lines().count(), build.steps.len() + 1);
+
+        let summary = build.summary();
+        assert!(!summary.contains("Drone"), "workers are left out: {summary}");
+        assert!(summary.contains("Spawning Pool") && summary.contains("Roach Warren"), "{summary}");
+        assert!(summary.split(", ").all(|e| e.split(' ').next().unwrap().parse::<u32>().is_ok()), "{summary}");
 
         assert_eq!(build.bank.len() as u32, build.span() + 1, "the bank covers the timeline");
         assert_eq!(build.bank_at(0), (50.0, 0.0));

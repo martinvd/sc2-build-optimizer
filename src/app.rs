@@ -687,6 +687,12 @@ impl BuildOptimizer {
                     .child(stat("States explored", progress::group(build.explored), None, cx))
                     .child(stat("Search took", format!("{:.1}s", finished.elapsed.as_secs_f32()), None, cx)),
             )
+            .child(
+                v_flex()
+                    .gap_1()
+                    .child(section_label("Build order", cx))
+                    .child(div().text_sm().font_family(theme.mono_font_family.clone()).child(build.summary())),
+            )
             .child(self.render_timeline(build, cx))
     }
 
