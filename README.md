@@ -38,15 +38,6 @@ expansion, 2 gas buildings, 3 production structures of each type and 2 queens, a
 no macro hatcheries. Change these limits in the app's Model settings, or see `--help` for
 the CLI options.
 
-| File        | Role                                              |
-| ----------- | ------------------------------------------------- |
-| `data.rs`   | Tech trees, costs, build times and game constants |
-| `plan.rs`   | Turns a goal into everything that must be built   |
-| `sim.rs`    | The simulation                                    |
-| `search.rs` | The build order search                            |
-| `build.rs`  | The finished build shown by the CLI and the app   |
-| `app.rs`    | The desktop app                                   |
-
 ## Limitations
 
 - Large goals (20+ units) can hit the search budget. You still get the best build found,
